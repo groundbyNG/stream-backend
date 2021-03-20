@@ -45,24 +45,9 @@ const UserSchema = new mongoose.Schema({
  * Methods
  */
 UserSchema.method({
-  setAvatar: (avatar) => {
-    this.avatar = avatar;
-  },
-  setPassword: (password) => {
-    // Creating a unique salt for a particular user
-    this.salt = crypto.randomBytes(16).toString('hex');
-
-    // Hashing user's salt and password with 1000 iterations,
-    this.hash = crypto
-      .pbkdf2Sync(password, this.salt, 1000, 64, 'sha512')
-      .toString('hex');
-  },
-  validPassword: (password) => {
-    const hash = crypto
-      .pbkdf2Sync(password, this.salt, 1000, 64, 'sha512')
-      .toString('hex');
-    return this.hash === hash;
-  },
+	validPassword: (password, salt, hash) => {
+		return (hash === crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex'));
+	},
 });
 
 /**

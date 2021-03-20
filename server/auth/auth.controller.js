@@ -2,6 +2,7 @@ const httpStatus = require('http-status');
 const APIError = require('../helpers/APIError');
 const User = require('../user/user.model');
 const signAuthToken = require('../helpers/signAuthToken');
+const { DAY } = require('../constants/date');
 // const config = require('../../config/config');
 // const jwt = require('jsonwebtoken');
 
@@ -18,32 +19,32 @@ const signAuthToken = require('../helpers/signAuthToken');
  * @param next
  * @returns {*}
  */
-function login(req, res, next) {
+async function login(req, res, next) {
   // Ideally you'll fetch this from the db
   // Idea here was to show how jwt works with simplicity
   const { username, password } = req.body;
-
-  User.findOne({ username }, (err, user) => {
+  try {
+    const user = await User.findOne({ username }).exec();
     if (user === null) {
       return res.status(400).send({
         message: 'User not found.',
       });
     }
-    if (user.validPassword(password)) {
-      const token = signAuthToken({ username });
-      return res.status(200).json({ token });
+    if (user.validPassword(password, user.salt, user.hash)) {
+      const expiresIn = Date.now() + DAY;
+      const token = signAuthToken({ username, _id: user._id }, expiresIn);
+      return res.status(200).json({ token, expiresIn });
     }
     return res.status(400).send({
       message: 'Wrong Password',
     });
-  });
-
-  const err = new APIError(
-    'Authentication error',
-    httpStatus.UNAUTHORIZED,
-    true
-  );
-  return next(err);
+  } catch (err) {
+    return next(new APIError(
+      `Authentication error: ${err}`,
+      httpStatus.UNAUTHORIZED,
+      true
+    ));
+  }
 }
 
 /**

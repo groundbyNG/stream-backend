@@ -1,8 +1,10 @@
 const User = require('./user.model');
 const path = require('path');
+const crypto = require('crypto');
 const { mkdir, rename } = require('fs').promises;
 const signAuthToken = require('../helpers/signAuthToken');
 const { USER_DIR, ASSETS } = require('../constants/routes');
+const { DAY } = require('../constants/date');
 
 /**
  * Load user and append to req.
@@ -33,7 +35,11 @@ async function create(req, res, next) {
 	const { password, email, username } = req.body;
 	const user = new User({ email, username });
 
-	user.setPassword(password);
+  user.salt = crypto.randomBytes(16).toString('hex');
+	// Hashing user's salt and password with 1000 iterations,
+	user.hash = crypto
+		.pbkdf2Sync(password, user.salt, 1000, 64, 'sha512')
+		.toString('hex');
 
 	const avatar = req.files[0];
 	const userPath = path.join(global.__basedir, `${USER_DIR}/${user._id}`);
@@ -47,17 +53,18 @@ async function create(req, res, next) {
 	try {
 		await mkdir(userPath, { recursive: true });
 		await rename(tempPath, targetPath);
-		user.setAvatar(targetPath);
+		user.avatar = targetPath;
 	} catch (e) {
     // eslint-disable-next-line no-console
 		console.log('Error during save avatar ', e);
 	}
 
-	user
+  user
 		.save()
 		.then(() => {
-			const token = signAuthToken({ username });
-			return res.status(200).json({ token });
+      const expiresIn = Date.now() + DAY;
+      const token = signAuthToken({ username, _id: user._id }, expiresIn);
+      return res.status(200).json({ token, expiresIn });
 		})
 		.catch(e => next(e));
 }
